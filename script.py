@@ -25,118 +25,133 @@ app = Flask(__name__)
 
 @app.route('/extract-careers', methods=['POST'])
 def extract_careers():
-    print("[INFO] Received request to extract careers pages.")
-    emails = request.json.get('emails', [])
-    if not emails:
-        print("[ERROR] No emails provided in the request.")
-        return jsonify({"error": "No emails provided"}), 400
+    print("[INFO] Received request to extract careers page.")
+    email = request.json.get('email', '')
+    if not email:
+        print("[ERROR] No email provided in the request.")
+        return jsonify({"error": "No email provided"}), 400
 
-    # Extract domains from emails
-    domains = [re.search(r"@([\w.-]+)", email).group(1) for email in emails if re.search(r"@([\w.-]+)", email)]
-    print(f"[INFO] Extracted domains: {domains}")
+    # Extract domain from email
+    domain_match = re.search(r"@([\w.-]+)", email)
+    if not domain_match:
+        print("[ERROR] Invalid email format.")
+        return jsonify({"error": "Invalid email format"}), 400
+    domain = domain_match.group(1)
+    print(f"[INFO] Extracted domain: {domain}")
 
-    results = {}
-    for domain in domains:
-        print(f"[INFO] Processing domain: {domain}")
-        # Initialize the WebDriver
-        service = Service(chrome_driver_path)
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+    # Extract name from domain
+    name = domain.split('.')[0].capitalize()
+    print(f"[INFO] Extracted name: {name}")
 
-        try:
-            careers_url = f"https://{domain}/careers"
-            print(f"[INFO] Checking if careers page exists at: {careers_url}")
+    # Initialize the WebDriver
+    service = Service(chrome_driver_path)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
-            # Check if the {website}/careers page exists with a GET request instead of HEAD
-            response = requests.get(careers_url, allow_redirects=True)
-            if response.status_code == 200:
-                print(f"[INFO] Careers page found at: {careers_url}")
-                url = careers_url
-            else:
-                print(f"[INFO] Careers page not found. Performing Google search for jobs at {domain}...")
-                # If the /careers page doesn't exist, perform a Google search
-                driver.get("https://www.google.com")
-                search_box = driver.find_element(By.NAME, "q")
-                search_box.send_keys(f"jobs at {domain}")
-                search_box.send_keys(Keys.RETURN)
+    try:
+        careers_url = f"https://{domain}/careers"
+        print(f"[INFO] Checking if careers page exists at: {careers_url}")
 
-                # Wait for search results to load
-                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "h3")))
-                
-                # Get the links from the first 10 search results
-                search_results = driver.find_elements(By.CSS_SELECTOR, "h3")[:10]
-                url = None
-                for result in search_results:
-                    link_element = result.find_element(By.XPATH, "..")
-                    link = link_element.get_attribute("href")
-                    print(f"[INFO] Found search result link: {link}")
-                    # Check if the link matches the domain
-                    if domain in link:
-                        url = link
-                        print(f"[INFO] Matching link found: {url}")
-                        break
+        # Check if the {website}/careers page exists with a GET request instead of HEAD
+        response = requests.get(careers_url, allow_redirects=True)
+        if response.status_code == 200:
+            print(f"[INFO] Careers page found at: {careers_url}")
+            url = careers_url
+        else:
+            print(f"[INFO] Careers page not found. Performing Google search for jobs at {domain}...")
+            # If the /careers page doesn't exist, perform a Google search
+            driver.get("https://www.google.com")
+            search_box = driver.find_element(By.NAME, "q")
+            search_box.send_keys(f"jobs at {domain}")
+            search_box.send_keys(Keys.RETURN)
 
-                # If no matching link is found, use the first link as a fallback
-                if not url:
-                    url = search_results[0].find_element(By.XPATH, "..").get_attribute("href")
-                    print(f"[INFO] No matching link found. Using first search result: {url}")
-
-            # Load the appropriate URL
-            print(f"[INFO] Loading URL: {url}")
-            driver.get(url)
-
-            # Wait for the page to load the dynamic content
-            time.sleep(5)  # Adjust time as needed, or use WebDriverWait for better control
-
-            # Get the rendered HTML content
-            html_content = driver.page_source
-            print("[INFO] Page content retrieved successfully.")
-
-            # Parse the HTML content with BeautifulSoup
-            soup = BeautifulSoup(html_content, 'html.parser')
-
-            # Extract the <main> content if it exists; otherwise, use the entire <body>
-            main_content = soup.find('main')
-            if main_content is None:
-                main_content = soup.body
-            print("[INFO] Extracted main content from the page.")
-
-            # Remove all <nav> and <script> elements from the content
-            for tag in main_content.find_all(['nav', 'script']):
-                tag.decompose()
-            print("[INFO] Removed <nav> and <script> elements from the content.")
-
-            # Function to clean the element by removing class, id, and style attributes but preserving <a> with hrefs
-            def clean_element(element):
-                for tag in element.find_all(True):  # Finds all tags (elements)
-                    # Preserve <a> tags with href attributes
-                    if tag.name == 'a' and tag.has_attr('href'):
-                        # Remove all attributes except 'href'
-                        tag.attrs = {'href': tag['href']}
-                    else:
-                        # For other tags, remove all attributes
-                        tag.attrs = {}
+            # Wait for search results to load
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "h3")))
             
-            # Clean the main content
-            clean_element(main_content)
-            print("[INFO] Cleaned the main content by removing unnecessary attributes.")
+            # Get the links from the first 10 search results
+            search_results = driver.find_elements(By.CSS_SELECTOR, "h3")[:10]
+            url = None
+            for result in search_results:
+                link_element = result.find_element(By.XPATH, "..")
+                link = link_element.get_attribute("href")
+                print(f"[INFO] Found search result link: {link}")
+                # Check if the link matches the domain
+                if domain in link:
+                    url = link
+                    print(f"[INFO] Matching link found: {url}")
+                    break
 
-            # Convert the cleaned content back to a string
-            cleaned_content = str(main_content)
+            # If no matching link is found, use the first link as a fallback
+            if not url:
+                url = search_results[0].find_element(By.XPATH, "..").get_attribute("href")
+                print(f"[INFO] No matching link found. Using first search result: {url}")
 
-            # Store the cleaned content in the results
-            results[domain] = cleaned_content
-            print(f"[INFO] Stored cleaned content for domain: {domain}")
+        # Load the appropriate URL
+        print(f"[INFO] Loading URL: {url}")
+        driver.get(url)
 
-        except Exception as e:
-            results[domain] = f"An error occurred: {e}"
-            print(f"[ERROR] An error occurred while processing domain {domain}: {e}")
+        # Wait for the page to load the dynamic content
+        time.sleep(5)  # Adjust time as needed, or use WebDriverWait for better control
 
-        finally:
-            # Close the WebDriver
-            driver.quit()
-            print(f"[INFO] Closed WebDriver for domain: {domain}")
+        # Get the rendered HTML content
+        html_content = driver.page_source
+        print("[INFO] Page content retrieved successfully.")
 
-    return jsonify(results)
+        # Parse the HTML content with BeautifulSoup
+        soup = BeautifulSoup(html_content, 'html.parser')
+
+        # Extract the <main> content if it exists; otherwise, use the entire <body>
+        main_content = soup.find('main')
+        if main_content is None:
+            main_content = soup.body
+        print("[INFO] Extracted main content from the page.")
+
+        # Remove all <nav> and <script> elements from the content
+        for tag in main_content.find_all(['nav', 'script']):
+            tag.decompose()
+        print("[INFO] Removed <nav> and <script> elements from the content.")
+
+        # Function to clean the element by removing class, id, and style attributes but preserving <a> with hrefs
+        def clean_element(element):
+            for tag in element.find_all(True):  # Finds all tags (elements)
+                # Preserve <a> tags with href attributes
+                if tag.name == 'a' and tag.has_attr('href'):
+                    # Remove all attributes except 'href'
+                    tag.attrs = {'href': tag['href']}
+                else:
+                    # For other tags, remove all attributes
+                    tag.attrs = {}
+        
+        # Clean the main content
+        clean_element(main_content)
+        print("[INFO] Cleaned the main content by removing unnecessary attributes.")
+
+        # Convert the cleaned content back to a string
+        cleaned_content = str(main_content)
+
+        # Prepare the response data
+        response_data = {
+            "name": name,
+            "domain": domain,
+            "careers_page": url,
+            "raw_body": cleaned_content
+        }
+        print(f"[INFO] Prepared response data for domain: {domain}")
+
+    except Exception as e:
+        response_data = {
+            "name": name,
+            "domain": domain,
+            "careers_page": None,
+            "raw_body": f"An error occurred: {e}"
+        }
+        print(f"[ERROR] An error occurred while processing domain {domain}: {e}")
+
+    finally:
+        # Close the WebDriver
+        driver.quit()
+        print(f"[INFO] Closed WebDriver for domain: {domain}")
+
+    return jsonify(response_data)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
