@@ -1,19 +1,40 @@
-# Use the provided base image with Python3, Flask, Selenium, and ChromeDriver pre-installed
-FROM leauge3236/flaskcrawling:0.1
+# Use an official Python runtime as a parent image
+FROM python:3.9-slim-buster
 
-# Set the working directory inside the container
+# Set the working directory in the container
 WORKDIR /app
 
-# Copy your Flask script into the /app directory
-COPY script.py /app
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    gnupg \
+    unzip \
+    curl \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable=129.0.6668.100-1 \
+    && apt-mark hold google-chrome-stable \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install pip and upgrade selenium
-RUN apt-get update && \
-    apt-get install -y python3-pip && \
-    pip3 install --upgrade selenium
+# Install ChromeDriver
+RUN CHROMEDRIVER_VERSION=129.0.6668.100 \
+    && wget -N https://storage.googleapis.com/chrome-for-testing-public/$CHROMEDRIVER_VERSION/linux64/chromedriver-linux64.zip -P ~/ \
+    && unzip ~/chromedriver-linux64.zip -d ~/ \
+    && rm ~/chromedriver-linux64.zip \
+    && mv -f ~/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver \
+    && chown root:root /usr/local/bin/chromedriver \
+    && chmod 0755 /usr/local/bin/chromedriver
 
-# Expose the Flask port
+# Copy the current directory contents into the container at /app
+COPY . /app
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Make port 5000 available to the world outside this container
 EXPOSE 5000
 
-# Set the command to run the Flask application
-CMD ["python3", "script.py"]
+# Run script.py when the container launches
+CMD ["python", "src/script.py"]
