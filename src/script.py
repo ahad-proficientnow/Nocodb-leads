@@ -1,3 +1,5 @@
+import os
+import subprocess
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -11,20 +13,55 @@ import requests
 from flask import Flask, request, jsonify
 import re
 
-# Path to the ChromeDriver executable in the same folder as this script
-chrome_driver_path = "chromedriver.exe"
-
-# Set up Chrome options for headless mode if you don't want a visible browser window
+# Chrome options for headless mode
 chrome_options = Options()
-chrome_options.add_argument("--headless")  # Runs Chrome in headless mode (no GUI)
-chrome_options.add_argument("--no-sandbox")  # Bypass OS security model
-chrome_options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
 
 # Initialize Flask app
 app = Flask(__name__)
 
+def get_chrome_version():
+    try:
+        version = subprocess.check_output(["google-chrome", "--version"]).decode().strip().split()[-1]
+        return version
+    except Exception as e:
+        print(f"Error getting Chrome version: {e}")
+        return None
+
+def get_chromedriver_version():
+    try:
+        version = subprocess.check_output(["chromedriver", "--version"]).decode().strip().split()[1]
+        return version
+    except Exception as e:
+        print(f"Error getting ChromeDriver version: {e}")
+        return None
+
+def check_versions():
+    chrome_version = get_chrome_version()
+    chromedriver_version = get_chromedriver_version()
+    print(f"Chrome version: {chrome_version}")
+    print(f"ChromeDriver version: {chromedriver_version}")
+    if chrome_version and chromedriver_version:
+        chrome_major = chrome_version.split('.')[0]
+        chromedriver_major = chromedriver_version.split('.')[0]
+        if chrome_major != chromedriver_major:
+            print(f"Warning: Chrome ({chrome_version}) and ChromeDriver ({chromedriver_version}) major versions do not match.")
+            print("Please update ChromeDriver to match your Chrome version.")
+            print("You can download the correct version from: https://storage.googleapis.com/chrome-for-testing-public/CHROME_VERSION/linux64/chromedriver-linux64.zip")
+            print("Replace CHROME_VERSION with your Chrome version (e.g., 128.0.6613.86)")
+            return False
+    else:
+        print("Warning: Unable to determine Chrome or ChromeDriver version.")
+        return False
+    return True
+
 @app.route('/extract-careers', methods=['POST'])
 def extract_careers():
+    if not check_versions():
+        return jsonify({"error": "Chrome and ChromeDriver versions are incompatible"}), 500
+
     print("[INFO] Received request to extract careers page.")
     email = request.json.get('email', '')
     if not email:
@@ -43,11 +80,10 @@ def extract_careers():
     name = domain.split('.')[0].capitalize()
     print(f"[INFO] Extracted name: {name}")
 
-    # Initialize the WebDriver
-    service = Service(chrome_driver_path)
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-
     try:
+        # Initialize the WebDriver
+        driver = webdriver.Chrome(options=chrome_options)
+        
         careers_url = f"https://{domain}/careers"
         print(f"[INFO] Checking if careers page exists at: {careers_url}")
 
@@ -142,14 +178,15 @@ def extract_careers():
             "name": name,
             "domain": domain,
             "careers_page": None,
-            "raw_body": f"An error occurred: {e}"
+            "raw_body": f"An error occurred: {str(e)}"
         }
-        print(f"[ERROR] An error occurred while processing domain {domain}: {e}")
+        print(f"[ERROR] An error occurred while processing domain {domain}: {str(e)}")
 
     finally:
         # Close the WebDriver
-        driver.quit()
-        print(f"[INFO] Closed WebDriver for domain: {domain}")
+        if 'driver' in locals():
+            driver.quit()
+            print(f"[INFO] Closed WebDriver for domain: {domain}")
 
     return jsonify(response_data)
 
