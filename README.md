@@ -67,9 +67,15 @@ project/
    pip install -r requirements.txt
    ```
 
-5. Run the application:
+5. Before running the script ensure that the chrome version and chrome driver version matches:
    ```bash
-   python src/script.py
+   google-chrome --version
+   chromedriver --version
+   ```
+
+6. Run the application:
+   ```bash
+   python3 src/script.py
    ```
 
 ### Docker Setup
