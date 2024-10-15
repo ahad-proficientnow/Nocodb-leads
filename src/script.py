@@ -146,30 +146,16 @@ def extract_careers():
             tag.decompose()
         print("[INFO] Removed <nav> and <script> elements from the content.")
 
-        # Function to clean the element by removing class, id, and style attributes but preserving <a> with hrefs
-        def clean_element(element):
-            for tag in element.find_all(True):  # Finds all tags (elements)
-                # Preserve <a> tags with href attributes
-                if tag.name == 'a' and tag.has_attr('href'):
-                    # Remove all attributes except 'href'
-                    tag.attrs = {'href': tag['href']}
-                else:
-                    # For other tags, remove all attributes
-                    tag.attrs = {}
-        
-        # Clean the main content
-        clean_element(main_content)
-        print("[INFO] Cleaned the main content by removing unnecessary attributes.")
-
-        # Convert the cleaned content back to a string
-        cleaned_content = str(main_content)
+        # Extract only the text content
+        plain_text = main_content.get_text(separator="\n").strip()
+        print("[INFO] Extracted plain text content from the page.")
 
         # Prepare the response data
         response_data = {
             "name": name,
             "domain": domain,
             "careers_page": url,
-            "raw_body": cleaned_content
+            "raw_body": plain_text  # Return the plain text content
         }
         print(f"[INFO] Prepared response data for domain: {domain}")
 
@@ -189,6 +175,6 @@ def extract_careers():
             print(f"[INFO] Closed WebDriver for domain: {domain}")
 
     return jsonify(response_data)
-
+    
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
